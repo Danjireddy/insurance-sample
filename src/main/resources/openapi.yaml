@@ -1,0 +1,203 @@
+openapi: 3.0.3
+info:
+  title: Insurance Sample API
+  description: |
+    APAC Commercial Insurance Platform — Policy BFF Service.
+    Contract-first: this specification is the single source of truth for all API shapes.
+  version: 1.0.0
+  contact:
+    name: Insurance Platform Team
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+
+tags:
+  - name: Policies
+    description: Policy management operations
+  - name: Summary
+    description: Aggregated statistics
+
+paths:
+
+  /api/v1/policies:
+    get:
+      tags: [Policies]
+      operationId: listPolicies
+      summary: List policies with pagination, sorting and filtering
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 0, minimum: 0 }
+        - name: size
+          in: query
+          schema: { type: integer, default: 20, minimum: 1, maximum: 100 }
+        - name: sort
+          in: query
+          description: "Field and direction, e.g. premiumAmount,desc"
+          schema: { type: string, default: "createdAt,desc" }
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/PolicyStatus' }
+        - name: lineOfBusiness
+          in: query
+          schema: { $ref: '#/components/schemas/LineOfBusiness' }
+        - name: region
+          in: query
+          schema: { type: string }
+        - name: effectiveDateFrom
+          in: query
+          schema: { type: string, format: date }
+        - name: effectiveDateTo
+          in: query
+          schema: { type: string, format: date }
+        - name: search
+          in: query
+          description: Free-text search across policyNumber, policyholderName, underwriter
+          schema: { type: string }
+      responses:
+        '200':
+          description: Paginated list of policies
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PolicyPageResponse' }
+        '400':
+          description: Invalid request parameters
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+
+  /api/v1/policies/summary:
+    get:
+      tags: [Summary]
+      operationId: getPolicySummary
+      summary: Aggregated statistics — counts, premiums, expiring-soon
+      responses:
+        '200':
+          description: Summary statistics
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PolicySummaryResponse' }
+
+  /api/v1/policies/flag:
+    patch:
+      tags: [Policies]
+      operationId: flagPoliciesForReview
+      summary: Bulk-flag policies for review
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BulkFlagRequest' }
+      responses:
+        '200':
+          description: Flag operation result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BulkFlagResponse' }
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+
+  /api/v1/policies/{id}:
+    get:
+      tags: [Policies]
+      operationId: getPolicyById
+      summary: Get a single policy by UUID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Policy detail
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PolicyResponse' }
+        '404':
+          description: Policy not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+
+components:
+  schemas:
+
+    PolicyStatus:
+      type: string
+      enum: [Active, Expired, Pending, Cancelled]
+
+    LineOfBusiness:
+      type: string
+      enum: [Property, Casualty, "A&H", Marine]
+
+    PolicyResponse:
+      type: object
+      properties:
+        id:            { type: string, format: uuid }
+        policyNumber:  { type: string, example: "POL-000042" }
+        policyholderName: { type: string }
+        lineOfBusiness: { $ref: '#/components/schemas/LineOfBusiness' }
+        status:        { $ref: '#/components/schemas/PolicyStatus' }
+        premiumAmount: { type: number, format: double }
+        currency:      { type: string, example: "SGD" }
+        effectiveDate: { type: string, format: date }
+        expiryDate:    { type: string, format: date }
+        region:        { type: string }
+        underwriter:   { type: string }
+        flaggedForReview: { type: boolean }
+        createdAt:     { type: string, format: date-time }
+        updatedAt:     { type: string, format: date-time }
+
+    PolicyPageResponse:
+      type: object
+      properties:
+        content:       { type: array, items: { $ref: '#/components/schemas/PolicyResponse' } }
+        page:          { type: integer }
+        size:          { type: integer }
+        totalElements: { type: integer, format: int64 }
+        totalPages:    { type: integer }
+        first:         { type: boolean }
+        last:          { type: boolean }
+
+    BulkFlagRequest:
+      type: object
+      required: [policyIds]
+      properties:
+        policyIds:
+          type: array
+          items: { type: string, format: uuid }
+          minItems: 1
+          maxItems: 100
+
+    BulkFlagResponse:
+      type: object
+      properties:
+        flaggedCount:  { type: integer }
+        flaggedIds:    { type: array, items: { type: string, format: uuid } }
+        notFoundIds:   { type: array, items: { type: string, format: uuid } }
+
+    PolicySummaryResponse:
+      type: object
+      properties:
+        countByStatus:
+          type: object
+          additionalProperties: { type: integer }
+        totalPremiumByLineOfBusiness:
+          type: object
+          additionalProperties: { type: number }
+        expiringSoonCount: { type: integer }
+        totalActivePolicies: { type: integer }
+        totalPremium: { type: number }
+
+    ProblemDetail:
+      type: object
+      properties:
+        type:     { type: string }
+        title:    { type: string }
+        status:   { type: integer }
+        detail:   { type: string }
+        instance: { type: string }

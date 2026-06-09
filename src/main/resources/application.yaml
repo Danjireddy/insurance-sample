@@ -1,0 +1,128 @@
+spring:
+  application:
+    name: insurance-sample
+
+  # ── Database ────────────────────────────────────────────────────────────────
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:h2:mem:my_sql;MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE}
+    username: ${SPRING_DATASOURCE_USERNAME:sa}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
+    driver-class-name: ${SPRING_DATASOURCE_DRIVER:org.h2.Driver}
+
+  # MySQL production override (set env vars):
+  # SPRING_DATASOURCE_URL=jdbc:mysql://localhost:3306/my_sql?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+  # SPRING_DATASOURCE_USERNAME=root
+  # SPRING_DATASOURCE_PASSWORD=secret
+  # SPRING_DATASOURCE_DRIVER=com.mysql.cj.jdbc.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: ${JPA_DIALECT:org.hibernate.dialect.H2Dialect}
+        # MySQL: org.hibernate.dialect.MySQLDialect
+    open-in-view: false
+
+  # ── Flyway ──────────────────────────────────────────────────────────────────
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    schemas: my_sql
+    default-schema: my_sql
+
+  # ── H2 Console (local dev only) ─────────────────────────────────────────────
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+  # ── Kafka ───────────────────────────────────────────────────────────────────
+  kafka:
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all
+      retries: 3
+      properties:
+        enable.idempotence: true
+        max.in.flight.requests.per.connection: 1
+    consumer:
+      group-id: insurance-sample-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      enable-auto-commit: false
+      properties:
+        spring.json.trusted.packages: "com.insurance.sample.domain.event"
+    listener:
+      ack-mode: manual
+
+  # ── Jackson ─────────────────────────────────────────────────────────────────
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+    deserialization:
+      fail-on-unknown-properties: false
+    default-property-inclusion: non_null
+
+  # ── Response compression ─────────────────────────────────────────────────────
+  web:
+    resources:
+      add-mappings: false
+
+server:
+  port: ${SERVER_PORT:8080}
+  compression:
+    enabled: true
+    mime-types: application/json,text/plain
+    min-response-size: 1024
+  error:
+    include-message: always
+    include-binding-errors: always
+
+# ── Actuator ────────────────────────────────────────────────────────────────
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,caches
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+
+# ── SpringDoc / Swagger ──────────────────────────────────────────────────────
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: alpha
+  show-actuator: false
+
+# ── Application-specific ──────────────────────────────────────────────────────
+app:
+  kafka:
+    enabled: ${APP_KAFKA_ENABLED:false}
+    topics:
+      policy-flagged: policy.flagged
+      policy-status-changed: policy.status-changed
+  cache:
+    policy-list-ttl-seconds: 60
+    policy-detail-ttl-seconds: 300
+    policy-summary-ttl-seconds: 120
+
+logging:
+  level:
+    com.insurance.sample: INFO
+    org.hibernate.SQL: WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
